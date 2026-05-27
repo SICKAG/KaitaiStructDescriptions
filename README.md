@@ -1,108 +1,213 @@
-# KataiStructDescriptions
-This Repository includes Kaitai-Struct descriptions for the following data formats:
-<ul>
-    <li>Compact Format</li>
-</ul>
+<div align="center">
 
-## Getting started
+<img src="doc/SICK-logo.svg" alt="SICK Logo" width="300"/>
+<br/>
+<img src="doc/SICK-SDK-icon.svg" alt="SICK Icon" width="90"/>
 
-To compile a Kaitai-Struct file the Kaitai-Struct compiler is required. There are two ways of doing this: via web or download.  
+# KaitaiStructDescriptions
 
-## Generating Code
+Kaitai Struct format descriptions for the **SICK LiDAR Compact Format** — generate ready-to-use parsers in Python, C#, Java, C++, Go, and more without writing any parsing code by hand.
 
-### Local compiling
-The Kaitai-Struct compiler can be downloaded from following page: (https://kaitai.io/#download) 
+![Language](https://img.shields.io/badge/Language-Kaitai_Struct-005aff)
+![Sensors](https://img.shields.io/badge/Sensors-picoScan100_|_multiScan100_|_LRS4000-005aff)
+[![Maintained](https://img.shields.io/badge/Maintained-yes-005aff)](https://github.com/SICKAG/KaitaiStructDescriptions)
+[![Open Issues](https://img.shields.io/github/issues/SICKAG/KaitaiStructDescriptions?label=Open%20Issues&color=005aff)](https://github.com/SICKAG/KaitaiStructDescriptions/issues)
 
-### Compile a Kaitai-Struct file
-To compile the file to a specific programming language, go into the the folder, where the Kaitai description resides and open the command line.
-Then type following command:  
+[⚡️ Quickstart with Python](#️-quickstart-with-python) • [⚡️ Quickstart with C#](#️-quickstart-with-c) • [🌐 Web IDE](#-web-ide-no-installation-required)
+
+</div>
+
+<details>
+  <summary><strong style="font-size:1.25em">Table of contents</strong></summary>
+
+- [📋 Format Overview](#-format-overview)
+- [🏛️ Compact Frame Structure](#️-compact-frame-structure)
+- [⚡️ Quickstart with Python](#️-quickstart-with-python)
+  - [1. Install the Kaitai Struct Compiler](#1-install-the-kaitai-struct-compiler)
+  - [2. Generate the Python parser](#2-generate-the-python-parser)
+  - [3. Install the runtime and parse](#3-install-the-runtime-and-parse)
+- [⚡️ Quickstart with C#](#️-quickstart-with-c)
+  - [1. Generate the C# parser](#1-generate-the-c-parser)
+  - [2. Receive and parse](#2-receive-and-parse)
+- [🌐 Web IDE (no installation required)](#-web-ide-no-installation-required)
+- [🛠️ Known Issues](#️-known-issues)
+  - [Missing `FromIO` method](#missing-fromio-method)
+- [💬 Support](#-support)
+
+</details>
+
+---
+
+## 📋 Format Overview
+
+All compact telegrams share the same outer frame (`compact_frame.ksy`). The `command_id` field selects the payload type:
+
+| Name         | Type (`command_id`) | `.ksy` file               | Sensors                                 |
+| ------------ | ------------------- | ------------------------- | --------------------------------------- |
+| Primary Data | 1                   | `type_1_primary_data.ksy` | picoScan100, multiScan100, LRS4000      |
+| IMU          | 2                   | `type_2_imu.ksy`          | picoScan150, multiScan100, multiScan200 |
+| Encoder      | 4                   | `type_4_encoder.ksy`      | picoScan150                             |
+
+---
+
+## 🏛️ Compact Frame Structure
+
+Every telegram — regardless of type — is wrapped in the same outer frame:
+
+```txt
+┌──────────────┬──────────────┬──────────────────┬──────────────┐
+│  magic       │  command_id  │  payload         │  checksum    │
+│  4 bytes     │  u32 le      │  variable        │  u32 le      │
+│  0x02020202  │              │                  │  CRC32       │
+└──────────────┴──────────────┴──────────────────┴──────────────┘
 ```
-Kaitai-Struct-compiler.bat [Filename] -t [programming language] 
-Kaitai-Struct-compiler.bat compact_frame.ksy -t csharp   
+
+- **magic** — four `0x02` bytes that mark the start of every compact telegram.
+- **command_id** — selects the payload type (see table above).
+- **payload** — type-specific data; described by the individual `.ksy` files.
+- **checksum** — CRC32 computed over `magic + command_id + payload`.
+
+---
+
+## ⚡️ Quickstart with Python
+
+### 1. Install the Kaitai Struct Compiler
+
+Download `ksc` from <https://kaitai.io/#download> and add it to your `PATH`. Java 8 or later is required.
+
+### 2. Generate the Python parser
+
+```bash
+ksc -t python formats/compact_frame.ksy
 ```
 
-The generated code will be appear in the same Folder.
+This writes `compact_frame.py` and all imported payload modules into the current directory.
 
-### Web compiling
+### 3. Install the runtime and parse
 
-To compile the Kaitai file in web open the following page: (https://ide.kaitai.io/#)  
-
-You can drag and drop the file into the browser. To compile the the file in a specific language, right click on the imported file, select "Generate Parser" and then select the language.
-You will see the generated code on the right-hand side. Copy and paste it into an empty file and add it to your project.
-
-
-## Dependency
-
-### Kaitai Struct runtime libraries
-To receive data with the Kaitai-Struct parser, the the runtime libraries for the programming language of your choice must be included in your application. They can be found here: https://kaitai.io/. To include the libraries use the respective mechanisms of your development environment.
-
-As an example, for C# run the following command:
-
-``` dotnet
-$ dotnet add package KaitaiStruct.Runtime.CSharp --version 0.10.0
+```bash
+pip install kaitaistruct
 ```
 
-## Receive data
-The C# code below demonstrates how data can be received and converted into Compact Format using the generated code. For other programming languages similar code can be used.
+```python
+import socket
+from kaitaistruct import KaitaiStream, BytesIO
+from compact_frame import CompactFrame
 
-``` csharp
-using Kaitai;
-using System.Net.Sockets;
+# Receive one UDP datagram from the sensor
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind(("", 2115))          # use the appropriate port for your data type
+raw, _ = sock.recvfrom(65535)
+
+frame = CompactFrame(KaitaiStream(BytesIO(raw)))
+print(f"command_id : {frame.command_id}")
+print(f"checksum   : 0x{frame.checksum:08x}")
+
+if frame.command_id == 1:          # Primary Data
+    header = frame.payload.header
+    print(f"telegram version : {header.telegram_version}")
+    print(f"modules          : {len(frame.payload.module)}")
+    for mod in frame.payload.module:
+        print(f"  beams: {mod.metadata.num_beams_per_scan}, "
+              f"lines: {mod.metadata.num_lines_in_module}, "
+              f"echos: {mod.metadata.num_echos_per_beam}")
+
+elif frame.command_id == 2:        # IMU
+    imu = frame.payload
+    print(f"accel  : x={imu.acceleration.x:.4f}  y={imu.acceleration.y:.4f}  z={imu.acceleration.z:.4f}")
+    print(f"gyro   : x={imu.angular_velocity.x:.4f}  y={imu.angular_velocity.y:.4f}  z={imu.angular_velocity.z:.4f}")
+
+elif frame.command_id == 4:        # Encoder
+    enc = frame.payload
+    print(f"tick counter : {enc.tick_count}")
+    print(f"speed        : {enc.speed:.3f}")
+```
+
+---
+
+## ⚡️ Quickstart with C\#
+
+### 1. Generate the C# parser
+
+```bash
+ksc -t csharp formats/compact_frame.ksy
+```
+
+This produces `CompactFrame.cs` and the payload class files. Add them to your project together with the [Kaitai Struct C# runtime](https://github.com/kaitai-io/kaitai_struct_csharp_runtime).
+
+### 2. Receive and parse
+
+```csharp
 using System.Net;
+using System.Net.Sockets;
+using Kaitai;
 
-class Example
+// Receive one UDP datagram from the sensor
+using var udp = new UdpClient(2115);   // use the appropriate port for your data type
+var remote = new IPEndPoint(IPAddress.Any, 0);
+byte[] raw = udp.Receive(ref remote);
+
+var frame = CompactFrame.FromBytes(raw);
+Console.WriteLine($"command_id : {frame.CommandId}");
+Console.WriteLine($"checksum   : 0x{frame.Checksum:x8}");
+
+switch (frame.CommandId)
 {
+    case 1: // Primary Data
+        var pd = (PrimaryData)frame.Payload;
+        Console.WriteLine($"telegram version : {pd.Header.TelegramVersion}");
+        Console.WriteLine($"modules          : {pd.Module.Count}");
+        foreach (var mod in pd.Module)
+            Console.WriteLine($"  beams={mod.Metadata.NumBeamsPerScan} "
+                            + $"lines={mod.Metadata.NumLinesInModule} "
+                            + $"echos={mod.Metadata.NumEchosPerBeam}");
+        break;
 
-    static CompactFrame[] ReadUDPPacket(string IPAdress, int port, int numberOfSegments)
-    {
-        CompactFrame[] compactFrames = new CompactFrame[numberOfSegments];
-        using UdpClient udpClient = new UdpClient(port);
-        IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Parse(IPAdress), 2115);
+    case 2: // IMU
+        var imu = (Imu)frame.Payload;
+        Console.WriteLine($"accel : x={imu.Acceleration.X:F4}  y={imu.Acceleration.Y:F4}  z={imu.Acceleration.Z:F4}");
+        Console.WriteLine($"gyro  : x={imu.AngularVelocity.X:F4}  y={imu.AngularVelocity.Y:F4}  z={imu.AngularVelocity.Z:F4}");
+        break;
 
-        for (int i = 0; i < numberOfSegments; i++)
-        {
-            // Receive UDP Packet
-            byte[] result = udpClient.Receive(ref remoteEndPoint);
-            byte[] receiveBuffer = result;
-
-            // Convert the UDP Packet to a Stream for Kaitai and convert stream
-            Stream stream = new MemoryStream(receiveBuffer);
-            CompactFrame cf = CompactFrame.FromIO(stream); //This is a Kaitai-Struct Function
-            compactFrames[i] = cf;
-
-        }
-        udpClient.Close();
-        return compactFrames;
-    }
-
-    static void Main()
-    {
-        //Receive 100 segments from IP address 192.168.0.1 via port 2115
-        CompactFrame[] cf = ReadUDPPacket("192.168.0.100", 2115, 100);
-
-        //Output example
-        foreach (CompactFrame frame in cf)
-        {
-            if (frame == null) continue;
-            string frameNumber = frame.Module[0].Metadata.FrameNumber.ToString();
-            string segmentCounter = frame.Module[0].Metadata.SegmentCounter.ToString();
-            string startAngle = frame.Module[0].Metadata.ThetaStart[0].ToString();
-            string distance = frame.Module[0].Beams[0].Lines[0].Echos[0].Distance.ToString();
-            Console.WriteLine($"FrameNumber: {frameNumber}  SegmentCounter: {segmentCounter,-3}  Start Angle: {startAngle,-12}  Distance: {distance}");
-        }
-    }
+    case 4: // Encoder
+        var enc = (Encoder)frame.Payload;
+        Console.WriteLine($"tick counter : {enc.TickCount}");
+        Console.WriteLine($"speed        : {enc.Speed:F3}");
+        break;
 }
 ```
 
-## Known Issues
-### Missing FromIO method
-When the code is generated it can happen that the FromIO method is missing. E.g In C# this method is missing, in python it is generated. To add this method, add these lines of code in the "ComapctFrame" file after the first FromFile() method right at the beginning.
+---
 
-C# example
+## 🌐 Web IDE (no installation required)
 
-``` csharp
+Open the [Kaitai Web IDE](https://ide.kaitai.io/#) in your browser and drag any `.ksy` file from the `formats/` directory onto the page. To generate a parser:
+
+1. Right-click the imported file in the file tree on the left.
+2. Select **Generate Parser** and choose your target language.
+3. The generated code appears on the right — copy it into your project.
+
+No Java or `ksc` installation is needed.
+
+---
+
+## 🛠️ Known Issues
+
+### Missing `FromIO` method
+
+Depending on the target language, the generated `CompactFrame` class may not include a `FromIO` method. In Python it is generated automatically; in C# it is not.
+
+To add it manually, insert the following method in `CompactFrame.cs` directly after the existing `FromFile()` method:
+
+```csharp
 public static CompactFrame FromIO(Stream io)
 {
     return new CompactFrame(new KaitaiStream(io));
 }
 ```
+
+---
+
+## 💬 Support
+
+Please open a GitHub issue for bug or questions.
