@@ -1,21 +1,25 @@
 meta:
-  id: imu
+  id: type_2_imu
   endian: le
   bit-endian: be
+
+doc: |
+  Compact Format Type 2.
+  This telegram has no standard compact header.
+  Sensors: picoScan100, multiScan100.
 
 seq:
   - id: telegram_version
     type: u4
-    doc: Version of the telegram with the command_id used.
     valid: 1
 
   - id: acceleration
     type: vector3f
-    doc: Acceleration in m/s^2
+    doc: Acceleration in m/s^2.
 
   - id: angular_velocity
     type: vector3f
-    doc: Angular velocity in rad/s
+    doc: Angular velocity in rad/s.
 
   - id: orientation
     type: quaternion
@@ -26,8 +30,8 @@ seq:
       yaw = tan(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
   - id: timestamp
-    doc: Sensor system time in µs since 1.1.1970 00:00 in UTC.
     type: u8
+    doc: Unix timestamp [us].
 
 types:
   vector3f:
