@@ -3,7 +3,7 @@ meta:
   endian: le
 
 doc: |
-  Compact header shared by telegram type 4.
+  Compact header shared by telegram types 4, 6, and 7.
 
 seq:
   - id: telegram_counter
@@ -16,6 +16,7 @@ seq:
 
   - id: telegram_version
     type: u4
+    doc: Compact telegram format version.
 
   - id: payload_length
     type: u4

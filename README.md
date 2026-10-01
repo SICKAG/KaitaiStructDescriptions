@@ -10,7 +10,7 @@ Kaitai Struct format descriptions for the SICK LiDAR Compact Format.
 Generate ready-to-use parsers in Python, C#, Java, C++, Go, and more without writing parsing code by hand.
 
 ![Language](https://img.shields.io/badge/Language-Kaitai_Struct-005aff)
-![Sensors](https://img.shields.io/badge/Sensors-picoScan100_|_multiScan100_|_LRS4000-005aff)
+![Sensors](https://img.shields.io/badge/Sensors-multiScan100_|_multiScan200_|_picoScan100_|_LRS4000-005aff)
 [![Maintained](https://img.shields.io/badge/Maintained-yes-005aff)](https://github.com/SICKAG/KaitaiStructDescriptions)
 [![Open Issues](https://img.shields.io/github/issues/SICKAG/KaitaiStructDescriptions?label=Open%20Issues&color=005aff)](https://github.com/SICKAG/KaitaiStructDescriptions/issues)
 
@@ -25,11 +25,14 @@ Generate ready-to-use parsers in Python, C#, Java, C++, Go, and more without wri
 All compact telegrams share the same outer frame (`compact_frame.ksy`).
 The `telegram_type` field selects the payload type:
 
-| Type | Name         | `.ksy` file                                     | Sensors                             |
-| ---: | ------------ | ----------------------------------------------- | ----------------------------------- |
-|    1 | Primary Data | `type_1_primary_data_spherical_coordinates.ksy` | picoScan100, multiScan100, LRS4000 |
-|    2 | IMU          | `type_2_imu.ksy`                                | picoScan100, multiScan100          |
-|    4 | Encoder      | `type_4_encoder.ksy`                            | picoScan150                        |
+| Type | Name                             | `.ksy` file                                      | Sensors                             |
+| ---: | -------------------------------- | ------------------------------------------------ | ----------------------------------- |
+|    1 | Primary Data                    | `type_1_primary_data_spherical_coordinates.ksy`  | picoScan100, multiScan100, LRS4000 |
+|    2 | IMU                             | `type_2_imu.ksy`                                 | picoScan100, multiScan100          |
+|    3 | Ambient Light                   | `type_3_ambient_light.ksy`                       | multiScan200                       |
+|    4 | Encoder                         | `type_4_encoder.ksy`                             | picoScan150                        |
+|    6 | Primary Data (multiScan200)     | `type_6_primary_data_multiscan200.ksy`           | multiScan200                       |
+|    7 | IMU (standard header)           | `type_7_imu_standard_header.ksy`                 | multiScan200                       |
 
 All `.ksy` files are located in the `formats/` directory.
 
@@ -39,22 +42,33 @@ All `.ksy` files are located in the `formats/` directory.
 
 ## Architecture
 
-`compact_frame.ksy` is the entry point. It dispatches to the matching payload type based on `telegram_type`.
-Type 4 uses the common header sub-type in `compact_header.ksy`. (This header will be used in all future compact telegram types.) Types 1 and 2 use their own header layouts.
+`compact_frame.ksy` is the entry point for all telegram types. It dispatches to
+the matching payload type based on `telegram_type`. Types 4, 6, and 7 use the
+common header sub-type in `compact_header.ksy`; types 1 and 2 use their own
+header layouts, and type 3 uses the common header as well.
 
 ```mermaid
-graph TD
+flowchart TD
     CF[compact_frame.ksy]
     T1[type_1_primary_data_spherical_coordinates.ksy]
     T2[type_2_imu.ksy]
+    T3[type_3_ambient_light.ksy]
     T4[type_4_encoder.ksy]
+    T6[type_6_primary_data_multiscan200.ksy]
+    T7[type_7_imu_standard_header.ksy]
     CH[compact_header.ksy]
 
     CF --> T1
     CF --> T2
+    CF --> T3
     CF --> T4
+    CF --> T6
+    CF --> T7
 
+    T6 --> CH
+    T7 --> CH
     T4 --> CH
+    T3 --> CH
 ```
 
 ---
@@ -103,11 +117,30 @@ elif frame.telegram_type == 2:
     print(f"accel  : x={imu.acceleration.x:.4f}  y={imu.acceleration.y:.4f}  z={imu.acceleration.z:.4f}")
     print(f"gyro   : x={imu.angular_velocity.x:.4f}  y={imu.angular_velocity.y:.4f}  z={imu.angular_velocity.z:.4f}")
 
+elif frame.telegram_type == 3:
+    ambient = frame.payload
+    print(f"frame number     : {ambient.frame_number}")
+    print(f"layers           : {ambient.number_of_layers}")
+    print(f"columns          : {ambient.number_of_columns}")
+    print(f"pixels           : {len(ambient.ambient_light_data)}")
+
 elif frame.telegram_type == 4:
     enc = frame.payload
     print(f"telegram counter : {enc.header.telegram_counter}")
     print(f"tick count       : {enc.tick_count}")
     print(f"speed            : {enc.speed:.3f}")
+
+elif frame.telegram_type == 6:
+    pd = frame.payload
+    print(f"telegram counter : {pd.header.telegram_counter}")
+    print(f"frame number     : {pd.frame_number}")
+    print(f"layers           : {pd.number_of_layers}")
+    print(f"columns          : {pd.number_of_columns_in_segment}")
+
+elif frame.telegram_type == 7:
+    imu = frame.payload
+    print(f"accel  : x={imu.acceleration.x:.4f}  y={imu.acceleration.y:.4f}  z={imu.acceleration.z:.4f}")
+    print(f"gyro   : x={imu.angular_velocity.x:.4f}  y={imu.angular_velocity.y:.4f}  z={imu.angular_velocity.z:.4f}")
 ```
 
 ---
@@ -128,7 +161,8 @@ Open the [Kaitai Web IDE](https://ide.kaitai.io/#) in your browser and drag any 
 
 When compiling, kaitai-struct-compiler may emit style-guide warnings such as
 `use 'num_elevation_angles' instead of 'number_of_layers'` for count fields in
-`type_1_primary_data_spherical_coordinates.ksy`.
+`type_1_primary_data_spherical_coordinates.ksy` and
+`type_6_primary_data_multiscan200.ksy`.
 
 These warnings are expected and safe to ignore.
 

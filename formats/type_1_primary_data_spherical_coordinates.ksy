@@ -89,7 +89,7 @@ types:
         repeat-expr: number_of_lines_in_module
         doc: |
           Array of acquisition times for the first beam of each scan in the current module in us.
-          The device's internal time base is used.
+          The device time base is used.
 
       - id: timestamp_stop
         type: u8
@@ -97,7 +97,7 @@ types:
         repeat-expr: number_of_lines_in_module
         doc: |
           Array of acquisition times for the last beam of each scan in the current module in us.
-          The device's internal time base is used.
+          The device time base is used.
 
       - id: phi
         type: f4
